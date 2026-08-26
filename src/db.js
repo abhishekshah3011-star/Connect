@@ -192,6 +192,7 @@ export const saveSettings = patch => guard("save settings", () => sb.from("app_s
 /* ---------- file storage ---------- */
 
 export const BUCKET = "ziu-files";
+export const FORM_BUCKET = "automation-need-files";
 export const MAX_FILE_MB = 25;
 
 /* Uploads one file and returns { name, size, url, path } — or null if the
