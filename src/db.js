@@ -224,17 +224,18 @@ export async function deleteFile(path) {
 const rowToReq = (r, source = "requirements") => ({
   id: `${source}:${r.id}`, dbId: r.id, source, publicId: r.public_id || r.publicId || r.reference || `REQ-${r.id}`, title: r.title || r.name || "Untitled request", department: r.department || r.team || "",
   requestor: r.requestor || r.requester || r.requested_by || "", email: r.email || r.requestor_email || "",
-  payload: r.payload || {}, files: arr(r.files),
+  payload: r.payload || r.fields || r.data || r.form_data || {}, files: arr(r.files || r.attachments),
   score: r.priority_score ?? r.priorityScore ?? null, band: r.priority_band || r.priorityBand || "",
-  status: r.status || "submitted", rejectReason: r.reject_reason || "",
+  status: ({ pending: "submitted", new: "submitted" })[r.status] || r.status || "submitted", rejectReason: r.reject_reason || r.rejectReason || "",
   decidedBy: r.decided_by || r.decidedBy, decidedAt: iso(r.decided_at || r.decidedAt),
-  taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt),
+  taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt || r.submitted_at || r.submittedAt || r.timestamp || r.at),
 });
 
 export const loadAutomationRequests = () =>
   guard("load automation requests", () =>
-    sb.from("automation_requests").select("*").order("created_at", { ascending: false }).limit(300), [])
-    .then(rows => (rows || []).map(r => rowToReq(r, "automation_requests")));
+    sb.from("automation_requests").select("*").limit(300), [])
+    .then(rows => (rows || []).map(r => rowToReq(r, "automation_requests"))
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
 
 export const decideRequirement = (id, patch) =>
   guard("save requirement", () => sb.from(patch.source || "requirements").update({
