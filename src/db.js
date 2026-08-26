@@ -231,15 +231,10 @@ const rowToReq = (r, source = "requirements") => ({
   taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt),
 });
 
-export const loadRequirements = () =>
-  Promise.all([
-    guard("load requirements", () => sb.from("requirements").select("*").order("created_at", { ascending: false }).limit(300), []),
-    guard("load automation requests", () => sb.from("automation_requests").select("*").order("created_at", { ascending: false }).limit(300), []),
-  ]).then(([requirements, automation]) => [
-    ...(requirements || []).map(r => rowToReq(r, "requirements")),
-    ...(automation || []).map(r => rowToReq(r, "automation_requests")),
-  ]
-    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
+export const loadAutomationRequests = () =>
+  guard("load automation requests", () =>
+    sb.from("automation_requests").select("*").order("created_at", { ascending: false }).limit(300), [])
+    .then(rows => (rows || []).map(r => rowToReq(r, "automation_requests")));
 
 export const decideRequirement = (id, patch) =>
   guard("save requirement", () => sb.from(patch.source || "requirements").update({
@@ -268,10 +263,6 @@ export function subscribe(h = {}) {
   on("chat_reads",    p => { if (p.new) h.onChatRead?.(p.new.person_id, iso(p.new.at)); });
   on("people",        () => h.onPeople?.());
   on("app_settings",  p => { if (p.new) h.onSettings?.({ groq: p.new.groq, mail: p.new.mail, formUrl: p.new.form_url }); });
-  on("requirements",  p => {
-    if (p.eventType === "DELETE") h.onReqDelete?.(`requirements:${p.old?.id}`);
-    else if (p.new) h.onRequirement?.(rowToReq(p.new, "requirements"));
-  });
   on("automation_requests", p => {
     if (p.eventType === "DELETE") h.onReqDelete?.(`automation_requests:${p.old?.id}`);
     else if (p.new) h.onRequirement?.(rowToReq(p.new, "automation_requests"));

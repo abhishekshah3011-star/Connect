@@ -732,7 +732,7 @@ export default function App() {
       if (snap.groq) setGroqState(snap.groq);
       if (snap.mail) setMailState(snap.mail);
       if (snap.formUrl) setFormUrlState(snap.formUrl);
-      setReqs(await DB.loadRequirements());
+      setReqs(await DB.loadAutomationRequests());
       setDbLive("live");
     })();
 
@@ -1421,7 +1421,7 @@ function Shell({ user, store, theme, flipTheme, onLogout }) {
   const pendingReqs = store.reqs.filter(r => r.status === "submitted").length;
   const NAV = [
     ["dashboard", "Overview", LayoutDashboard],
-    ["requirements", "Automation requests", Inbox, pendingReqs],
+    ["automation", "Automation requests", Inbox, pendingReqs],
     ["team", "Team performance", Users],
     ["reports", "Analysis", BarChart3],
     ["settings", "Settings", Settings],
@@ -1633,7 +1633,7 @@ function Shell({ user, store, theme, flipTheme, onLogout }) {
               )}
               {nav === "dashboard" && <SubAdminDash store={store} user={user} goTask={goTask} setModal={setModal} q={q} setQ={setQ} />}
               {nav === "team" && <TeamPerformance store={store} goTask={goTask} />}
-              {nav === "requirements" && <RequirementsPage store={store} user={user} goTask={goTask} />}
+              {nav === "automation" && <AutomationRequestsPage store={store} user={user} goTask={goTask} />}
               {nav === "reports" && <Reports store={store} />}
               {nav === "settings" && <SettingsPage user={user} store={store} theme={theme} flipTheme={flipTheme} openPalette={() => setPalette(true)} />}
             </>}
@@ -2312,7 +2312,7 @@ function ShareFormBar({ url }) {
   );
 }
 
-function RequirementsPage({ store, user, goTask }) {
+function AutomationRequestsPage({ store, user, goTask }) {
   const [tab, setTab] = useState("submitted");
   const [sort, setSort] = useState("score");
   const [open, setOpen] = useState(null);          // requirement id being viewed
