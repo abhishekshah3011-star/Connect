@@ -214,6 +214,20 @@ export async function uploadFile(taskId, file) {
   }
 }
 
+export const fileDownloadUrl = file => {
+  const url = file?.path
+    ? sb?.storage.from(BUCKET).getPublicUrl(file.path).data?.publicUrl
+    : file?.url;
+  if (!url) return "";
+  try {
+    const result = new URL(url);
+    result.searchParams.set("download", file.name || "download");
+    return result.href;
+  } catch {
+    return url;
+  }
+};
+
 /* Best-effort tidy-up when someone removes an attachment. */
 export async function deleteFile(path) {
   if (!sb || !path) return;

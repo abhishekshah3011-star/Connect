@@ -2222,7 +2222,6 @@ const REQ_FIELDS = [
   ["futureProcess", "Proposed future process"],
   ["functionalNeed", "Functional need"],
   ["obligations", "Regulatory / legal obligations"],
-  ["links", "Reference links"],
   /* original Requirement Intake field names */
   ["useCase", "Use-case description"],
   ["justification", "Why is this required?"],
@@ -2239,6 +2238,25 @@ const REQ_FIELDS = [
   ["keyRisks", "Key risks"],
   ["otherBenefits", "Other expected benefits"],
 ];
+
+const normaliseUrl = value => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try { return new URL(candidate).href; } catch { return ""; }
+};
+const referenceLinks = value => String(value || "").split(/[\n,\s]+/).map(normaliseUrl).filter(Boolean);
+
+function DownloadFileButton({ file }) {
+  const url = DB.fileDownloadUrl(file);
+  return (
+    <a href={url || "#"} download={file.name || "download"} target="_blank" rel="noopener noreferrer"
+      title={`Download ${file.name}`} onClick={e => { e.stopPropagation(); if (!url) e.preventDefault(); }}
+      style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0, color: url ? T.blue : T.faint, cursor: url ? "pointer" : "not-allowed", padding: "3px 5px", fontFamily: "inherit", fontSize: 11.5, fontWeight: 700 }}>
+      <Download size={14} /> Download
+    </a>
+  );
+}
 const REQ_META = [
   ["priority", "Requestor's own priority"],
   ["integrationApplicable", "Integration section"],
@@ -2436,12 +2454,26 @@ function AutomationRequestsPage({ store, user, goTask }) {
             </div>
           </div>
 
-          {REQ_FIELDS.filter(([k]) => (p[k] || "").trim()).map(([k, label]) => (
+          {REQ_FIELDS.filter(([k]) => String(p[k] || "").trim()).map(([k, label]) => (
             <div key={k} style={{ padding: "16px 26px", borderTop: `1px solid ${T.line}` }}>
               <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.3, textTransform: "uppercase", color: T.mut, marginBottom: 7 }}>{label}</div>
               <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.65, color: T.body, whiteSpace: "pre-wrap" }}>{p[k]}</p>
             </div>
           ))}
+
+          {referenceLinks(p.links).length > 0 && (
+            <div style={{ padding: "16px 26px", borderTop: `1px solid ${T.line}` }}>
+              <SectionHead icon={Link2} tint={T.blueSoft} color={T.blue}>Reference links</SectionHead>
+              <div style={{ display: "grid", gap: 7 }}>
+                {referenceLinks(p.links).map(url => (
+                  <a key={url} href={url} target="_blank" rel="noopener noreferrer" title={url}
+                    style={{ display: "flex", alignItems: "center", gap: 8, color: T.blue, fontSize: 13, textDecoration: "none", overflowWrap: "anywhere" }}>
+                    <ExternalLink size={14} style={{ flexShrink: 0 }} /> {url}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div style={{ padding: "18px 26px 22px", borderTop: `1px solid ${T.line}` }}>
             <SectionHead icon={Paperclip} tint={T.cyanSoft} color={T.cyan}>Attachments</SectionHead>
@@ -2453,7 +2485,7 @@ function AutomationRequestsPage({ store, user, goTask }) {
                       <FileText size={13} color={T.accent} style={{ flexShrink: 0 }} />
                       <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
                       <span style={{ marginLeft: "auto", color: T.faint, fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{fileSize(f.size)}</span>
-                      {f.url && <a href={f.url} download={f.name} target="_blank" rel="noopener noreferrer" title={`Download ${f.name}`} style={{ display: "flex", flexShrink: 0, color: T.blue }}><Download size={14} /></a>}
+                      {(f.url || f.path) && <DownloadFileButton file={f} />}
                     </div>
                   ))}
                 </div>}
@@ -3090,11 +3122,8 @@ function TaskDetail({ task: t, user, store, back, setModal }) {
                   <FileText size={13} color={T.accent} style={{ flexShrink: 0 }} />
                   <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={f.name}>{f.name}</span>
                   <span style={{ marginLeft: "auto", color: T.faint, fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>{fileSize(f.size)}{uinit(f.by)}</span>
-                  {f.url
-                    ? <a href={f.url} download={f.name} target="_blank" rel="noopener noreferrer" title={`Download ${f.name}`}
-                         style={{ display: "flex", flexShrink: 0, color: T.blue }} onClick={e => e.stopPropagation()}>
-                        <Download size={14} />
-                      </a>
+                  {f.url || f.path
+                    ? <DownloadFileButton file={f} />
                     : <span title="This file was recorded before uploads worked, so there's nothing to download. Remove it and add it again."
                             style={{ display: "flex", flexShrink: 0, color: T.faint, cursor: "help" }}>
                         <AlertTriangle size={13} />
