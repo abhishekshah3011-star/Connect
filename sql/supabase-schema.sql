@@ -98,6 +98,22 @@ create table if not exists public.audit_log (
 );
 create index if not exists audit_log_at_idx on public.audit_log (at desc);
 
+-- Public intake submissions are inserted by the intake app with its server
+-- key and read/updated by Connect with the browser publishable key.
+do $$
+begin
+  if to_regclass('public.automation_requests') is not null then
+    alter table public.automation_requests enable row level security;
+    drop policy if exists "ziu_automation_requests_read" on public.automation_requests;
+    drop policy if exists "ziu_automation_requests_update" on public.automation_requests;
+    create policy "ziu_automation_requests_read" on public.automation_requests
+      for select to anon, authenticated using (true);
+    create policy "ziu_automation_requests_update" on public.automation_requests
+      for update to anon, authenticated using (true) with check (true);
+    grant select, update on public.automation_requests to anon, authenticated;
+  end if;
+end $$;
+
 -- single shared row holding the Groq + EmailJS settings
 create table if not exists public.app_settings (
   id   int primary key default 1 check (id = 1),
