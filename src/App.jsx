@@ -227,8 +227,8 @@ const isViewer = u => u?.role === "viewer";
 /* viewers are read-only apart from comments and team chat */
 const canWrite   = u => !isViewer(u);          // move stages, attach files, pin links, block
 const canAdmin   = u => isOwner(u);            // create / edit / delete tasks, manage team, settings
-/* Requirements inbox — Krunal, Abhishek, Jaynil and Katha. The view-only
-   accounts never see it. */
+/* Automation requests are visible to every signed-in person; only members and
+  the assigner can approve or reject them. */
 const canReview  = u => isOwner(u) || u?.role === "member";
 
 /* assigner + view-only see the whole org; team members see their own work */
@@ -728,6 +728,7 @@ export default function App() {
       setChat(snap.chat);
       setChatRead(snap.chatRead);
       setEmails(snap.emails);
+      setAudit(snap.audit);
       if (snap.groq) setGroqState(snap.groq);
       if (snap.mail) setMailState(snap.mail);
       if (snap.formUrl) setFormUrlState(snap.formUrl);
@@ -774,8 +775,11 @@ export default function App() {
     } catch {}
   }, [tasks, audit, chat, chatRead, emails, notifs, usersTick, theme, groq, mail, formUrl]);
 
-  const logAudit = (by, task, ev) =>
-    setAudit(a => [{ at: new Date().toISOString(), by, task: task.id, title: task.title, ev }, ...a]);
+  const logAudit = (by, task, ev) => {
+    const row = { at: new Date().toISOString(), by, task: task.id, title: task.title, ev };
+    setAudit(a => [row, ...a]);
+    if (DB.hasDb()) DB.insertAudit(row);
+  };
 
   /* View Only Control accounts are copied on everything — they aren't an owner,
      creator or assignee anywhere, so without this their bell would stay empty.
@@ -913,14 +917,14 @@ export default function App() {
     };
     createTask(task);
     setReqs(rs => rs.map(x => x.id === r.id ? { ...x, status: "approved", decidedBy: byId, taskId: id } : x));
-    if (DB.hasDb()) DB.decideRequirement(r.id, { status: "approved", decidedBy: byId, taskId: id });
+    if (DB.hasDb()) DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "approved", decidedBy: byId, taskId: id });
     notify(USERS.map(u => u.id), `“${r.title}” was approved from requirement ${r.publicId} and is now task #${nextNo}`, id, byId);
     return id;
   };
 
   const rejectRequirement = (r, byId, reason) => {
     setReqs(rs => rs.map(x => x.id === r.id ? { ...x, status: "rejected", decidedBy: byId, rejectReason: reason } : x));
-    if (DB.hasDb()) DB.decideRequirement(r.id, { status: "rejected", decidedBy: byId, rejectReason: reason });
+    if (DB.hasDb()) DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "rejected", decidedBy: byId, rejectReason: reason });
   };
 
   const bumpUsers = () => {
@@ -1417,7 +1421,7 @@ function Shell({ user, store, theme, flipTheme, onLogout }) {
   const pendingReqs = store.reqs.filter(r => r.status === "submitted").length;
   const NAV = [
     ["dashboard", "Overview", LayoutDashboard],
-    ...(canReview(user) ? [["requirements", "Requirements", Inbox, pendingReqs]] : []),
+    ["requirements", "Automation requests", Inbox, pendingReqs],
     ["team", "Team performance", Users],
     ["reports", "Analysis", BarChart3],
     ["settings", "Settings", Settings],
@@ -1629,7 +1633,7 @@ function Shell({ user, store, theme, flipTheme, onLogout }) {
               )}
               {nav === "dashboard" && <SubAdminDash store={store} user={user} goTask={goTask} setModal={setModal} q={q} setQ={setQ} />}
               {nav === "team" && <TeamPerformance store={store} goTask={goTask} />}
-              {nav === "requirements" && canReview(user) && <RequirementsPage store={store} user={user} goTask={goTask} />}
+              {nav === "requirements" && <RequirementsPage store={store} user={user} goTask={goTask} />}
               {nav === "reports" && <Reports store={store} />}
               {nav === "settings" && <SettingsPage user={user} store={store} theme={theme} flipTheme={flipTheme} openPalette={() => setPalette(true)} />}
             </>}
@@ -2478,7 +2482,7 @@ function RequirementsPage({ store, user, goTask }) {
   /* ---- the list ---- */
   return (
     <div>
-      <PageTitle kicker="REQUIREMENTS" title="Requirement inbox"
+      <PageTitle kicker="AUTOMATION REQUESTS" title="Automation request inbox"
         sub="Submissions from the intake form. Approving one creates a task assigned to the team." />
 
       <ShareFormBar url={store.formUrl} />

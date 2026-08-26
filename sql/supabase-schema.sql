@@ -87,6 +87,17 @@ create table if not exists public.email_log (
 );
 create index if not exists email_log_at_idx on public.email_log (at desc);
 
+-- durable workspace audit trail, including events for deleted tasks
+create table if not exists public.audit_log (
+  id      bigserial primary key,
+  at      timestamptz not null default now(),
+  by_id   text,
+  task_id text,
+  title   text not null default '',
+  event   text not null
+);
+create index if not exists audit_log_at_idx on public.audit_log (at desc);
+
 -- single shared row holding the Groq + EmailJS settings
 create table if not exists public.app_settings (
   id   int primary key default 1 check (id = 1),
@@ -109,7 +120,7 @@ insert into public.app_settings (id) values (1) on conflict (id) do nothing;
 do $$
 declare t text;
 begin
-  foreach t in array array['people','tasks','notifications','chat_messages','chat_reads','email_log','app_settings']
+  foreach t in array array['people','tasks','notifications','chat_messages','chat_reads','email_log','audit_log','app_settings']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "ziu_all" on public.%I', t);
@@ -117,6 +128,18 @@ begin
       'create policy "ziu_all" on public.%I for all to anon, authenticated using (true) with check (true)', t);
     execute format('grant select, insert, update, delete on public.%I to anon, authenticated', t);
   end loop;
+end $$;
+
+-- The public intake form uses this table name. Enable live inbox updates when
+-- the form has already created it; otherwise the core schema remains portable.
+do $$
+begin
+  if to_regclass('public.automation_requests') is not null then
+    begin
+      alter publication supabase_realtime add table public.automation_requests;
+    exception when duplicate_object then null;
+    end;
+  end if;
 end $$;
 
 grant usage on schema public to anon, authenticated;
@@ -129,7 +152,7 @@ grant usage, select on all sequences in schema public to anon, authenticated;
 do $$
 declare t text;
 begin
-  foreach t in array array['people','tasks','notifications','chat_messages','chat_reads','app_settings']
+  foreach t in array array['people','tasks','notifications','chat_messages','chat_reads','audit_log','app_settings']
   loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);

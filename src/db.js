@@ -120,19 +120,21 @@ export const taskToRow = t => ({
 const rowToNotif = r => ({ id: r.id, to: r.recipient, text: r.body, at: iso(r.at), read: !!r.read, task: r.task_id });
 const rowToChat  = r => ({ id: r.id, by: r.by_id, text: r.body, at: iso(r.at) });
 const rowToEmail = r => ({ from: r.sender, to: arr(r.send_to), subject: r.subject, at: iso(r.at), task: r.task_id });
+const rowToAudit = r => ({ at: iso(r.at), by: r.by_id, task: r.task_id, title: r.title, ev: r.event });
 const rowToPerson= r => ({ id: r.id, name: r.name, email: r.email, role: r.role, initials: r.initials });
 
 /* ---------- reads ---------- */
 
 export async function loadAll() {
   if (!sb) return null;
-  const [people, tasks, notifs, chat, reads, emails, settings] = await Promise.all([
+  const [people, tasks, notifs, chat, reads, emails, audit, settings] = await Promise.all([
     guard("load people",   () => sb.from("people").select("*").order("sort_order"), []),
     guard("load tasks",    () => sb.from("tasks").select("*").order("no"), []),
     guard("load notifications", () => sb.from("notifications").select("*").order("at", { ascending: false }).limit(300), []),
     guard("load chat",     () => sb.from("chat_messages").select("*").order("at").limit(300), []),
     guard("load chat reads", () => sb.from("chat_reads").select("*"), []),
     guard("load emails",   () => sb.from("email_log").select("*").order("at", { ascending: false }).limit(200), []),
+    guard("load audit",    () => sb.from("audit_log").select("*").order("at", { ascending: false }).limit(500), []),
     guard("load settings", () => sb.from("app_settings").select("*").eq("id", 1).maybeSingle(), null),
   ]);
   const chatRead = {};
@@ -144,6 +146,7 @@ export async function loadAll() {
     chat:    (chat || []).map(rowToChat),
     chatRead,
     emails:  (emails || []).map(rowToEmail),
+    audit:   (audit || []).map(rowToAudit),
     groq: settings?.groq && Object.keys(settings.groq).length ? settings.groq : null,
     mail: settings?.mail && Object.keys(settings.mail).length ? settings.mail : null,
     formUrl: settings?.form_url || null,
@@ -170,6 +173,9 @@ export const setChatRead = personId =>
 
 export const insertEmail = ({ from, to, subject, task }) =>
   guard("log email", () => sb.from("email_log").insert({ sender: from, send_to: to, subject, task_id: task || null }));
+
+export const insertAudit = ({ by, task, title, ev, at }) =>
+  guard("save audit", () => sb.from("audit_log").insert({ by_id: by, task_id: task, title, event: ev, at }));
 
 export const savePeople = list =>
   guard("save people", () =>
@@ -215,29 +221,34 @@ export async function deleteFile(path) {
 
 /* ---------- requirement submissions ---------- */
 
-const rowToReq = r => ({
-  id: r.id, publicId: r.public_id, title: r.title, department: r.department,
-  requestor: r.requestor, email: r.email,
+const rowToReq = (r, source = "requirements") => ({
+  id: `${source}:${r.id}`, dbId: r.id, source, publicId: r.public_id || r.publicId || r.reference || `REQ-${r.id}`, title: r.title || r.name || "Untitled request", department: r.department || r.team || "",
+  requestor: r.requestor || r.requester || r.requested_by || "", email: r.email || r.requestor_email || "",
   payload: r.payload || {}, files: arr(r.files),
-  score: r.priority_score ?? null, band: r.priority_band || "",
+  score: r.priority_score ?? r.priorityScore ?? null, band: r.priority_band || r.priorityBand || "",
   status: r.status || "submitted", rejectReason: r.reject_reason || "",
-  decidedBy: r.decided_by, decidedAt: iso(r.decided_at),
-  taskId: r.task_id, createdAt: iso(r.created_at),
+  decidedBy: r.decided_by || r.decidedBy, decidedAt: iso(r.decided_at || r.decidedAt),
+  taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt),
 });
 
 export const loadRequirements = () =>
-  guard("load requirements", () =>
-    sb.from("requirements").select("*").order("created_at", { ascending: false }).limit(300), [])
-    .then(rows => (rows || []).map(rowToReq));
+  Promise.all([
+    guard("load requirements", () => sb.from("requirements").select("*").order("created_at", { ascending: false }).limit(300), []),
+    guard("load automation requests", () => sb.from("automation_requests").select("*").order("created_at", { ascending: false }).limit(300), []),
+  ]).then(([requirements, automation]) => [
+    ...(requirements || []).map(r => rowToReq(r, "requirements")),
+    ...(automation || []).map(r => rowToReq(r, "automation_requests")),
+  ]
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
 
 export const decideRequirement = (id, patch) =>
-  guard("save requirement", () => sb.from("requirements").update({
+  guard("save requirement", () => sb.from(patch.source || "requirements").update({
     status: patch.status,
     reject_reason: patch.rejectReason ?? "",
     decided_by: patch.decidedBy,
     decided_at: new Date().toISOString(),
     task_id: patch.taskId ?? null,
-  }).eq("id", id));
+  }).eq("id", patch.dbId ?? id));
 
 /* ---------- realtime ---------- */
 
@@ -258,8 +269,12 @@ export function subscribe(h = {}) {
   on("people",        () => h.onPeople?.());
   on("app_settings",  p => { if (p.new) h.onSettings?.({ groq: p.new.groq, mail: p.new.mail, formUrl: p.new.form_url }); });
   on("requirements",  p => {
-    if (p.eventType === "DELETE") h.onReqDelete?.(p.old?.id);
-    else if (p.new) h.onRequirement?.(rowToReq(p.new));
+    if (p.eventType === "DELETE") h.onReqDelete?.(`requirements:${p.old?.id}`);
+    else if (p.new) h.onRequirement?.(rowToReq(p.new, "requirements"));
+  });
+  on("automation_requests", p => {
+    if (p.eventType === "DELETE") h.onReqDelete?.(`automation_requests:${p.old?.id}`);
+    else if (p.new) h.onRequirement?.(rowToReq(p.new, "automation_requests"));
   });
 
   ch.subscribe(status => {
