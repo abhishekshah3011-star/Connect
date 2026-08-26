@@ -121,6 +121,7 @@ const rowToNotif = r => ({ id: r.id, to: r.recipient, text: r.body, at: iso(r.at
 const rowToChat  = r => ({ id: r.id, by: r.by_id, text: r.body, at: iso(r.at) });
 const rowToEmail = r => ({ from: r.sender, to: arr(r.send_to), subject: r.subject, at: iso(r.at), task: r.task_id });
 const requestFieldNames = ["processDescription", "futureProcess", "functionalNeed", "obligations", "links", "useCase", "justification", "currentProcess", "painPoints", "proposedSolution", "functionalRequirements", "stepProcess", "integrationRequirements", "systems", "dataInputsOutputs", "acceptanceCriteria", "regulatory", "keyRisks", "otherBenefits", "priority", "integrationApplicable", "benefitsApplicable", "riskApplicable", "requestType", "requiredDate", "dataClassification", "securityReview", "manualEffort", "effortReduction", "productivity", "currentCost", "costReduction"];
+const toSnake = key => key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 const rowToAudit = r => ({ at: iso(r.at), by: r.by_id, task: r.task_id, title: r.title, ev: r.event });
 const rowToPerson= r => ({ id: r.id, name: r.name, email: r.email, role: r.role, initials: r.initials });
 
@@ -224,12 +225,12 @@ export async function deleteFile(path) {
 
 const rowToReq = (r, source = "requirements") => ({
   id: `${source}:${r.id}`, dbId: r.id, source, publicId: r.public_id || r.publicId || r.request_id || r.reference || `REQ-${r.id}`, title: r.title || r.name || r.process_name || "Untitled request", department: r.department || r.team || "",
-  requestor: r.requestor || r.requester || r.requested_by || "", email: r.email || r.requestor_email || "",
-  payload: r.payload || r.fields || r.data || r.form_data || Object.fromEntries(requestFieldNames.filter(key => r[key] != null).map(key => [key, r[key]])), files: arr(r.files || r.attachments),
+  requestor: r.requestor || r.requester || r.requested_by || r.requestor_name || "", email: r.email || r.requestor_email || r.poc_email || "",
+  payload: r.payload || r.fields || r.data || r.form_data || Object.fromEntries(requestFieldNames.map(key => [key, r[key] ?? r[toSnake(key)]]).filter(([, value]) => value != null)), files: arr(r.files || r.attachments),
   score: r.priority_score ?? r.priorityScore ?? null, band: r.priority_band || r.priorityBand || "",
   status: ({ pending: "submitted", new: "submitted" })[r.status] || r.status || "submitted", rejectReason: r.reject_reason || r.rejectReason || "",
   decidedBy: r.decided_by || r.decidedBy, decidedAt: iso(r.decided_at || r.decidedAt),
-  taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt || r.submitted_at || r.submittedAt || r.timestamp || r.at),
+  taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt || r.submitted_at || r.submittedAt || r.timestamp || r.at || r.created),
 });
 
 export const loadAutomationRequests = () =>
