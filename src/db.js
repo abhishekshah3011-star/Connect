@@ -225,10 +225,10 @@ export async function deleteFile(path) {
 
 const rowToReq = (r, source = "requirements") => ({
   id: `${source}:${r.id}`, dbId: r.id, source, publicId: r.public_id || r.publicId || r.request_id || r.reference || `REQ-${r.id}`, title: r.title || r.name || r.process_name || "Untitled request", department: r.department || r.team || "",
-  requestor: r.requestor || r.requester || r.requested_by || r.requestor_name || "", email: r.email || r.requestor_email || r.poc_email || "",
+  requestor: r.requestor || r.requester || r.requested_by || r.requestor_name || r.poc || "", email: r.email || r.requestor_email || r.poc_email || "",
   payload: r.payload || r.fields || r.data || r.form_data || Object.fromEntries(requestFieldNames.map(key => [key, r[key] ?? r[toSnake(key)]]).filter(([, value]) => value != null)), files: arr(r.files || r.attachments),
   score: r.priority_score ?? r.priorityScore ?? null, band: r.priority_band || r.priorityBand || "",
-  status: ({ pending: "submitted", new: "submitted" })[r.status] || r.status || "submitted", rejectReason: r.reject_reason || r.rejectReason || "",
+  status: ({ pending: "submitted", new: "submitted", submitted: "submitted", approved: "approved", rejected: "rejected" })[String(r.status || "submitted").toLowerCase()] || "submitted", rejectReason: r.reject_reason || r.rejectReason || "",
   decidedBy: r.decided_by || r.decidedBy, decidedAt: iso(r.decided_at || r.decidedAt),
   taskId: r.task_id || r.taskId, createdAt: iso(r.created_at || r.createdAt || r.submitted_at || r.submittedAt || r.timestamp || r.at || r.created),
 });
