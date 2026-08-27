@@ -872,7 +872,7 @@ export default function App() {
 
   /* Approving turns a submission into a numbered task, assigned to the three
      team members, sitting at the first pipeline stage. */
-  const approveRequirement = (r, byId) => {
+  const approveRequirement = async (r, byId) => {
     const nextNo = Math.max(0, ...tasksRef.current.map(t => +t.no || 0)) + 1;
     const id = "T-" + (1000 + nextNo);
     const p = r.payload || {};
@@ -917,7 +917,7 @@ export default function App() {
     };
     createTask(task);
     setReqs(rs => rs.map(x => x.id === r.id ? { ...x, status: "approved", decidedBy: byId, taskId: id } : x));
-    if (DB.hasDb()) DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "approved", decidedBy: byId, taskId: id });
+    if (DB.hasDb()) await DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "approved", decidedBy: byId, taskId: id });
     notify(USERS.map(u => u.id), `“${r.title}” was approved from requirement ${r.publicId} and is now task #${nextNo}`, id, byId);
     return id;
   };
@@ -2350,8 +2350,8 @@ function AutomationRequestsPage({ store, user, goTask }) {
       : String(b.createdAt).localeCompare(String(a.createdAt)));
   const current = all.find(r => r.id === open);
 
-  const approve = (r) => {
-    const id = store.approveRequirement(r, user.id);
+  const approve = async (r) => {
+    const id = await store.approveRequirement(r, user.id);
     setOpen(null);
     celebrate();
     goTask(id);

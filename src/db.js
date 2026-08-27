@@ -276,6 +276,11 @@ export const loadAutomationRequests = () =>
 export const decideRequirement = async (id, patch) => {
   const table = patch.source || "requirements";
   const match = patch.dbId ?? id;
+  if (table === "automation_requests") {
+    const rows = await guard("save automation request status", () =>
+      sb.from(table).update({ status: patch.status }).eq("id", match).select("id"), []);
+    return rows.length > 0;
+  }
   const decision = {
     status: patch.status,
     reject_reason: patch.rejectReason ?? "",
