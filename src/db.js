@@ -218,19 +218,25 @@ export async function uploadFile(taskId, file) {
 export const fileDownloadUrl = file => {
   if (!file) return "";
 
-  if (file?.path && sb) {
-    const bucket = file?.bucket || BUCKET;
+  let url = file.url || "";
 
+  if (file.path && sb && file.bucket) {
     const { data } = sb.storage
-      .from(bucket)
+      .from(file.bucket)
       .getPublicUrl(file.path);
 
-    return data?.publicUrl || file?.url || "";
+    url = data?.publicUrl || url;
+  } else if (!url && file.path && sb) {
+    const { data } = sb.storage
+      .from(BUCKET)
+      .getPublicUrl(file.path);
+
+    url = data?.publicUrl || "";
   }
 
-  return file?.url || "";
-};
-   
+  if (!url) return "";
+
+  try {
     const result = new URL(url);
     result.searchParams.set("download", file.name || "download");
     return result.href;
