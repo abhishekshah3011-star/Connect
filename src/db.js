@@ -273,14 +273,26 @@ export const loadAutomationRequests = () =>
     .then(rows => (rows || []).map(r => rowToReq(r, "automation_requests"))
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))));
 
-export const decideRequirement = (id, patch) =>
-  guard("save requirement", () => sb.from(patch.source || "requirements").update({
+export const decideRequirement = async (id, patch) => {
+  const table = patch.source || "requirements";
+  const match = patch.dbId ?? id;
+  const decision = {
     status: patch.status,
     reject_reason: patch.rejectReason ?? "",
     decided_by: patch.decidedBy,
     decided_at: new Date().toISOString(),
     task_id: patch.taskId ?? null,
-  }).eq("id", patch.dbId ?? id));
+  };
+  let rows = await guard("save requirement", () => sb.from(table).update(decision)
+    .eq("id", match).select("id"), null);
+  /* Older intake tables may only have a status column. Keep the decision
+     durable even when their optional audit columns have not been migrated. */
+  if (rows === null) {
+    rows = await guard("save requirement status", () => sb.from(table).update({ status: patch.status })
+      .eq("id", match).select("id"), []);
+  }
+  return rows.length > 0;
+};
 
 /* ---------- realtime ---------- */
 

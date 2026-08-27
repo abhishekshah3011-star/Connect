@@ -104,8 +104,14 @@ do $$
 begin
   if to_regclass('public.automation_requests') is not null then
     alter table public.automation_requests enable row level security;
-    drop policy if exists "ziu_automation_requests_read" on public.automation_requests;
-    drop policy if exists "ziu_automation_requests_update" on public.automation_requests;
+    /* Remove any older restrictive policies left by the intake app. The
+       server-side intake still uses its service key, while Connect needs to
+       update decisions with the browser publishable key. */
+    execute (
+      select coalesce(string_agg(format('drop policy if exists %I on public.automation_requests', policyname), '; '), 'select 1')
+      from pg_policies
+      where schemaname = 'public' and tablename = 'automation_requests'
+    );
     create policy "ziu_automation_requests_read" on public.automation_requests
       for select to anon, authenticated using (true);
     create policy "ziu_automation_requests_update" on public.automation_requests

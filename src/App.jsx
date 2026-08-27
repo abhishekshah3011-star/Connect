@@ -922,9 +922,9 @@ export default function App() {
     return id;
   };
 
-  const rejectRequirement = (r, byId, reason) => {
+  const rejectRequirement = async (r, byId, reason) => {
     setReqs(rs => rs.map(x => x.id === r.id ? { ...x, status: "rejected", decidedBy: byId, rejectReason: reason } : x));
-    if (DB.hasDb()) DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "rejected", decidedBy: byId, rejectReason: reason });
+    if (DB.hasDb()) await DB.decideRequirement(r.dbId ?? r.id, { source: r.source, dbId: r.dbId, status: "rejected", decidedBy: byId, rejectReason: reason });
   };
 
   const bumpUsers = () => {
@@ -2356,9 +2356,9 @@ function AutomationRequestsPage({ store, user, goTask }) {
     celebrate();
     goTask(id);
   };
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!reason.trim()) return;
-    store.rejectRequirement(rejecting, user.id, reason.trim());
+    await store.rejectRequirement(rejecting, user.id, reason.trim());
     setRejecting(null); setReason(""); setOpen(null);
   };
 
@@ -3612,7 +3612,7 @@ function Modals({ modal, setModal, user, store, goTask }) {
 
   /* ---- New task — lands at "Task assigned" and the 9-stage pipeline begins ---- */
   if (modal.type === "new") {
-    return <NewTaskModal user={user} store={store} onClose={close} onCreate={(draft) => {
+    return <NewTaskModal user={user} store={store} onClose={close} onCreate={async (draft) => {
       const id = "T-" + (++SEQ);
       const nowIso = new Date().toISOString();
       const assignees = draft.assignees || [];
@@ -3622,7 +3622,7 @@ function Modals({ modal, setModal, user, store, goTask }) {
       const task = {
         id, no: Math.max(0, ...store.tasks.map(x => x.no || 0)) + 1,
         ...draft, title: draft.title.trim() || "Untitled task", desc: draft.desc.trim() || "No description provided yet.",
-        attachments: (draft.attachments || []).map(a => ({ ...a, by: user.id })),
+        attachments: [],
         status: "assigned", blocked: null,
         stageHistory: [{ stage: "assigned", at: nowIso, by: user.id }],
         createdBy: user.id, owner: user.id,
@@ -3632,6 +3632,14 @@ function Modals({ modal, setModal, user, store, goTask }) {
         requirements: "",
         history: [{ at: nowIso, by: user.id, ev }],
       };
+      const selectedFiles = draft.attachments || [];
+      if (DB.hasDb() && selectedFiles.length) {
+        const uploaded = await Promise.all(selectedFiles.map(a => DB.uploadFile(id, a.file)));
+        task.attachments = selectedFiles.map((a, i) => uploaded[i] && ({
+          name: a.name, size: a.size, by: user.id, at: a.at,
+          url: uploaded[i].url, path: uploaded[i].path,
+        })).filter(Boolean);
+      }
       store.createTask(task);
       store.logAudit(user.id, task, ev);
       if (assignees.length) {
@@ -3707,6 +3715,7 @@ function NewTaskModal({ onClose, onCreate, user, store }) {
   const toggleAssignee = id => setF(x => ({ ...x, assignees: x.assignees.includes(id) ? x.assignees.filter(a => a !== id) : [...x.assignees, id] }));
   const [more, setMore] = useState(false);
   const [files, setFiles] = useState([]);   // [{name,size}]
+  const [saving, setSaving] = useState(false);
   const nfRef = useRef(null);
   const [listening, setListening] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -3841,7 +3850,7 @@ function NewTaskModal({ onClose, onCreate, user, store }) {
       {more && <Field label="Attachments">
         <div style={{ display: "flex", gap: 6 }}>
           <input ref={nfRef} type="file" multiple style={{ display: "none" }}
-            onChange={e => { setFiles([...files, ...Array.from(e.target.files || []).map(x => ({ name: x.name, size: x.size }))]); if (nfRef.current) nfRef.current.value = ""; }} />
+            onChange={e => { setFiles([...files, ...Array.from(e.target.files || [])]); if (nfRef.current) nfRef.current.value = ""; }} />
           <Btn kind="soft" small onClick={() => nfRef.current?.click()} style={{ flex: 1, justifyContent: "center" }}><Upload size={13} /> Add attachment</Btn>
         </div>
         {files.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
@@ -3851,7 +3860,7 @@ function NewTaskModal({ onClose, onCreate, user, store }) {
       </Field>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 6 }}>
         <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn disabled={!ok} onClick={() => onCreate({ ...f, attachments: files.map(x => ({ name: x.name, size: x.size, at: new Date().toISOString() })) })}>
+        <Btn disabled={!ok || saving} onClick={async () => { setSaving(true); try { await onCreate({ ...f, attachments: files.map(file => ({ file, name: file.name, size: file.size, at: new Date().toISOString() })) }); } finally { setSaving(false); } }}>
           <Check size={14} /> Assign
         </Btn>
       </div>
