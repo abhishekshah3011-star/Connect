@@ -220,7 +220,7 @@ export const fileDownloadUrl = file => {
 
   let url = file.url || "";
 
-  if (file.path && sb && file.bucket) {
+  if (!url && file.path && sb && file.bucket) {
     const { data } = sb.storage
       .from(file.bucket)
       .getPublicUrl(file.path);
