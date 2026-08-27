@@ -231,8 +231,6 @@ export const fileDownloadUrl = file => {
   return file?.url || "";
 };
    
-  if (!url) return "";
-  try {
     const result = new URL(url);
     result.searchParams.set("download", file.name || "download");
     return result.href;
