@@ -910,7 +910,7 @@ export default function App() {
       remarks: "", productUrl: "",
       assignees: team,
       stageHistory: [{ stage: PIPELINE[0], at: nowIso, by: byId }],
-      attachments: (r.files || []).map(f => ({ name: f.name, size: f.size, by: byId, at: nowIso, url: f.url || "", path: f.path || "" })),
+      attachments: (r.files || []).map(f => ({ ...f, by: byId, at: nowIso })),
       links: [], comments: [], queries: [],
       history: [{ at: nowIso, by: byId, ev: `Created from requirement ${r.publicId} (${r.department} · ${r.requestor})`
         + (r.score != null ? ` — priority score ${r.score}/100, ${r.band}` : "") }],
