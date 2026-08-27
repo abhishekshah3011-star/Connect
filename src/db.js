@@ -216,9 +216,21 @@ export async function uploadFile(taskId, file) {
 }
 
 export const fileDownloadUrl = file => {
-  const url = file?.path
-    ? sb?.storage.from(BUCKET).getPublicUrl(file.path).data?.publicUrl
-    : file?.url;
+  if (!file) return "";
+
+  if (file?.path && sb) {
+    const bucket = file?.bucket || BUCKET;
+
+    const { data } = sb.storage
+      .from(bucket)
+      .getPublicUrl(file.path);
+
+    return data?.publicUrl || file?.url || "";
+  }
+
+  return file?.url || "";
+};
+   
   if (!url) return "";
   try {
     const result = new URL(url);
